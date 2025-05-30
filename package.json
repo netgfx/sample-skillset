@@ -5,7 +5,7 @@
   "main": "test-service.js",
   "scripts": {
     "start": "node test-service.js",
-    "dev": "nodemon test-service.js",
+    "dev": "node test-service.js",
     "test": "echo \"Run the service and test with Copilot Chat\""
   },
   "keywords": [
