@@ -131,7 +131,11 @@ app.get("/health", (req, res) => {
     status: "healthy",
     service: "Astraea.AI Test Service",
     timestamp: new Date().toISOString(),
-    endpoints: ["/api/test/greeting", "/api/test/analyze"],
+    endpoints: [
+      "/api/test/greeting",
+      "/api/test/analyze",
+      "/api/test/file-links",
+    ],
   });
 });
 
@@ -146,6 +150,110 @@ app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
     received_data: req.body,
     service_status: "ACTIVE AND RESPONDING",
   });
+});
+
+// NEW: File links testing endpoint
+app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
+  try {
+    console.log("🔗 File links endpoint called with:", req.body);
+
+    // Simulate some processing time
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    const response = {
+      message: "🔗 **File Link Testing Results**",
+      summary:
+        "Testing GitHub Copilot file linking functionality with various file reference formats",
+
+      basic_file_links: `📁 **Basic File Links:**
+• \`test-service.js\` - Main service file
+• \`test-file.js\` - Test utility file
+• \`package.json\` - Dependencies configuration
+• \`README.md\` - Documentation file`,
+
+      file_links_with_lines: `📍 **File Links with Line Numbers:**
+• \`test-service.js:1\` - File header
+• \`test-service.js:25\` - Middleware setup
+• \`test-service.js:150\` - File links endpoint  
+• \`test-file.js:10\` - Helper function
+• \`test-file.js:25-30\` - Error handling block`,
+
+      directory_structure: `📂 **Directory Structure:**
+• \`src/components/Header.vue\` - Header component
+• \`src/utils/helpers.js:45\` - Utility functions
+• \`src/styles/main.css:12-20\` - Main stylesheet
+• \`tests/unit/service.test.js:67\` - Unit tests
+• \`config/webpack.config.js:89\` - Build configuration`,
+
+      code_review_example: `🔍 **Mock Code Review with File Links:**
+
+**Security Issues:**
+- SQL injection vulnerability found in \`test-service.js:95\` - User input not sanitized
+- Missing authentication check in \`test-file.js:15\` - Endpoint accessible without auth
+
+**Performance Issues:**  
+- Database query in loop detected in \`src/data/repository.js:23-35\` - Consider batch operations
+- Large bundle size in \`src/components/Dashboard.vue:150\` - Implement code splitting
+
+**Code Quality Issues:**
+- Missing error handling in \`test-service.js:200\` - Add try-catch block
+- Unused import in \`test-file.js:5\` - Remove unused dependencies
+- Inconsistent naming in \`src/utils/formatters.js:12\` - Use camelCase convention`,
+
+      next_steps: `📋 **Next Steps with File References:**
+🚨 **BLOCKING**: Fix SQL injection in \`test-service.js:95\`
+⚠️ **HIGH PRIORITY**: Add authentication to \`test-file.js:15\`  
+📋 **MEDIUM PRIORITY**: Optimize queries in \`src/data/repository.js:23-35\`
+ℹ️ **LOW PRIORITY**: Clean up imports in \`test-file.js:5\``,
+
+      diff_example: `💡 **Code Suggestion with Diff:**
+\`\`\`diff
+--- a/test-service.js
++++ b/test-service.js
+@@ -93,3 +93,3 @@
+- const query = "SELECT * FROM users WHERE id = " + userId;
++ const query = "SELECT * FROM users WHERE id = ?";
++ const result = await db.execute(query, [userId]);
+\`\`\``,
+
+      files_summary: `📁 **All Referenced Files:**
+• \`test-service.js\`
+• \`test-file.js\`  
+• \`package.json\`
+• \`README.md\`
+• \`src/components/Header.vue\`
+• \`src/utils/helpers.js\`
+• \`src/styles/main.css\`
+• \`tests/unit/service.test.js\`
+• \`config/webpack.config.js\`
+• \`src/data/repository.js\`
+• \`src/components/Dashboard.vue\`
+• \`src/utils/formatters.js\``,
+
+      test_instructions: `🧪 **Testing Instructions:**
+1. Click on any file reference above (they should be clickable in Copilot Chat)
+2. File links should navigate to the actual files in your IDE
+3. Line number links should jump to specific lines
+4. Line range links should highlight the specified range
+
+**Expected Behavior:**
+- \`test-service.js:150\` should open this file and jump to line 150
+- \`test-file.js:25-30\` should open the file and highlight lines 25-30
+- Files without line numbers should just open the file`,
+
+      timestamp: new Date().toISOString(),
+      received_data: req.body,
+      status: "success",
+    };
+
+    console.log("📤 Sending file links response");
+    res.json(response);
+  } catch (error) {
+    console.error("❌ Error in file links endpoint:", error);
+    res
+      .status(500)
+      .json({ error: "Internal server error in file links endpoint" });
+  }
 });
 
 // Test endpoint 1: Simple greeting
@@ -191,7 +299,7 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
     // Simulate analysis processing time
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Mock analysis results
+    // Mock analysis results with file links
     const analysis = {
       language: language,
       lines_of_code: code_snippet.split("\n").length,
@@ -207,12 +315,14 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
           severity: "low",
           description: "Consider using const instead of let where possible",
           line: Math.floor(Math.random() * 5) + 1,
+          file: "test-service.js",
         },
         {
           type: "performance",
           severity: "medium",
           description: "Loop optimization opportunity detected",
           line: Math.floor(Math.random() * 5) + 1,
+          file: "test-file.js",
         },
       ],
     };
@@ -220,10 +330,20 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
     const response = {
       message: `🔍 **Code Analysis Complete**`,
       summary: `Analyzed ${analysis.lines_of_code} lines of ${language} code`,
+
+      issues_with_file_links: `🔍 **Issues Found:**
+• **Style Issue** in \`${analysis.issues_found[0].file}:${analysis.issues_found[0].line}\`: ${analysis.issues_found[0].description}
+• **Performance Issue** in \`${analysis.issues_found[1].file}:${analysis.issues_found[1].line}\`: ${analysis.issues_found[1].description}`,
+
       analysis: analysis,
       recommendations: `💡 **Recommendations:**\n${analysis.suggestions
         .map((s) => `• ${s}`)
         .join("\n")}`,
+
+      related_files: `📁 **Related Files:**
+• \`test-service.js\` - Main service implementation
+• \`test-file.js\` - Utility functions`,
+
       timestamp: new Date().toISOString(),
     };
 
@@ -244,7 +364,11 @@ app.get("/health", (req, res) => {
     status: "healthy",
     service: "Astraea.AI Test Service",
     timestamp: new Date().toISOString(),
-    endpoints: ["/api/test/greeting", "/api/test/analyze"],
+    endpoints: [
+      "/api/test/greeting",
+      "/api/test/analyze",
+      "/api/test/file-links",
+    ],
   });
 });
 
@@ -273,6 +397,14 @@ app.get("/", (req, res) => {
           language: "string (optional) - Programming language",
         },
       },
+      file_links: {
+        url: "/api/test/file-links",
+        method: "POST",
+        description: "Test file linking functionality for Copilot Chat",
+        parameters: {
+          any: "object - any parameters (for testing)",
+        },
+      },
     },
     setup_instructions: [
       "1. Start this service: node test-service.js",
@@ -280,6 +412,7 @@ app.get("/", (req, res) => {
       "3. Configure GitHub App skillset with the ngrok URLs",
       "4. Test with: @your-app-name say hello to John",
       '5. Test with: @your-app-name analyze this code: console.log("test")',
+      "6. Test file links with: @your-app-name test file links",
     ],
   });
 });
@@ -299,6 +432,7 @@ app.use("*", (req, res) => {
       "GET /health",
       "POST /api/test/greeting",
       "POST /api/test/analyze",
+      "POST /api/test/file-links",
     ],
   });
 });
@@ -314,10 +448,12 @@ app.listen(PORT, () => {
   console.log("3. Configure your GitHub App skillset with these endpoints:");
   console.log("   - https://your-ngrok-url.ngrok.io/api/test/greeting");
   console.log("   - https://your-ngrok-url.ngrok.io/api/test/analyze");
+  console.log("   - https://your-ngrok-url.ngrok.io/api/test/file-links");
   console.log("");
   console.log("🧪 Test commands:");
   console.log("   @your-app-name say hello to Alice");
   console.log(
     '   @your-app-name analyze this JavaScript: function test() { return "hello"; }'
   );
+  console.log("   @your-app-name test file links");
 });
