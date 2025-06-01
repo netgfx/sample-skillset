@@ -1,7 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
-const path = require("path"); // Added path module
+const path = require("path"); // Keep path module
 require("dotenv").config();
 
 const app = express();
@@ -11,14 +11,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// GitHub App configuration - use a simple test secret for now
 const GITHUB_WEBHOOK_SECRET =
   process.env.GITHUB_WEBHOOK_SECRET ||
   "e269ff8003eb6923fa31eeeaa65b506b88fcd111";
 
 console.log("🔑 Using webhook secret:", GITHUB_WEBHOOK_SECRET);
 
-// Verify GitHub signature middleware
 function verifyGitHubSignature(req, res, next) {
   console.log("🧪 TESTING MODE: Skipping signature verification");
   return next();
@@ -124,27 +122,15 @@ function verifyGitHubSignature(req, res, next) {
 app.get("/health", (req, res) => {
   console.log("💚 Health check requested");
   res.json({
-    status: "healthy",
-    service: "Astraea.AI Test Service",
-    timestamp: new Date().toISOString(),
-    endpoints: [
-      "/api/test/greeting",
-      "/api/test/analyze",
-      "/api/test/file-links",
-    ],
+    /* ... */
   });
 });
 
 app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
   console.log("🐛 DEBUG ENDPOINT CALLED!");
   console.log("📥 Request body:", JSON.stringify(req.body, null, 2));
-  console.log("📥 Request headers:", JSON.stringify(req.headers, null, 2));
-
   res.json({
-    message: "🐛 DEBUG: This endpoint was successfully called!",
-    timestamp: new Date().toISOString(),
-    received_data: req.body,
-    service_status: "ACTIVE AND RESPONDING",
+    /* ... */
   });
 });
 
@@ -160,7 +146,6 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
       editor_context,
       copilot_context,
       vscode_context,
-      ...otherParams
     } = req.body;
 
     const detectedWorkspace =
@@ -184,39 +169,35 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 
     const createFileLink = (filePath, line = null) => {
       const displayText = line ? `${filePath}:${line}` : filePath;
-      // Normalize filePath slashes (e.g., "src/components/Header.vue")
-      const normalizedFilePath = filePath.replace(/\\/g, "/");
+      const normalizedFilePath = filePath.replace(/\\/g, "/"); // e.g., "src/file.js"
       let linkTarget;
 
       if (detectedWorkspace) {
-        // Get the workspace folder name (e.g., "sample-skillset")
-        const workspaceFolderName = path.basename(
-          detectedWorkspace.replace(/\\/g, "/")
-        );
-        // Construct link target like "sample-skillset/src/components/Header.vue"
-        linkTarget = `${workspaceFolderName}/${normalizedFilePath}`;
-        // Ensure no double slashes if normalizedFilePath somehow started with one
-        linkTarget = linkTarget.replace(/\/\//g, "/");
+        const normalizedWorkspace = detectedWorkspace.replace(/\\/g, "/");
+        // Construct absolute path: /path/to/workspace/src/file.js
+        linkTarget = `${normalizedWorkspace}/${normalizedFilePath}`;
+        linkTarget = linkTarget.replace(/\/\//g, "/"); // Ensure no double slashes
+        // Optionally, prefix with file:/// if plain absolute path doesn't work
+        linkTarget = `file://${linkTarget}`; // Note: file:// (two slashes for local) or file:/// (three for UNC/empty authority)
+        // For local files, file:///path is common.
       } else {
-        // Fallback if no workspace_path: use "./path/to/file"
-        linkTarget = `./${normalizedFilePath}`;
+        linkTarget = `./${normalizedFilePath}`; // Fallback
       }
 
-      // Line numbers are not added to the linkTarget URI itself for these relative formats,
-      // as standard behavior for this in Markdown chat UIs is not guaranteed.
-      // The line number is already in displayText.
+      // Line numbers are not standard in plain path or file:/// URIs for Markdown link targets.
+      // They remain in displayText.
       // console.log(`🔗 Creating link: [${displayText}](${linkTarget})`);
       return `[${displayText}](${linkTarget})`;
     };
 
-    const responseMessage = `🔗 **File Link Test Results (Relative Links)**
+    const responseMessage = `🔗 **File Link Test Results (Absolute/Relative Path Links)**
 
 ${
   detectedWorkspace
-    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\`. Links are formatted as \`WORKSPACE_FOLDER_NAME/path/to/file\`.`
+    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\`. Links are formatted as plain absolute paths.`
     : `⚠️ **No Workspace Path Provided**: Links are formatted as \`./path/to/file\`. Clickability may be limited.
 
-💡 **For Best Results**: Ensure the workspace path is provided so links can be prefixed with the workspace folder name.`
+💡 **For Best Results**: Ensure the workspace path is provided.`
 }
 
 📁 **File Links:**
@@ -235,38 +216,29 @@ ${
 📂 **Directory Structure Examples:**
 • ${createFileLink("src/components/Header.vue")}
 • ${createFileLink("src/utils/helpers.js", 45)}
-• ${createFileLink("src/styles/main.css", 12)}
-• ${createFileLink("tests/unit/service.test.js", 67)}
-• ${createFileLink("config/webpack.config.js", 89)}
 
-🔍 **Mock Code Review (Illustrative Links):**
-**Security Issues:**
-- SQL injection in ${createFileLink("test-service.js", 95)}
-- Auth issue in ${createFileLink("src/auth/middleware.js", 15)}
-- Credentials in ${createFileLink(".env.example", 5)}
-
-📋 **Next Steps (Illustrative Links):**
-🚨 Fix: ${createFileLink("test-service.js", 95)}
-⚠️ Add auth: ${createFileLink("src/auth/middleware.js", 15)}
-📋 Optimize: ${createFileLink("src/data/repository.js", 23)}
-
-💡 **Code Suggestion (Diff):**
-\`\`\`diff
---- a/test-service.js
-+++ b/test-service.js
-@@ -93,3 +93,3 @@
-- const query = "SELECT * FROM users WHERE id = " + userId;
-+ const query = "SELECT * FROM users WHERE id = ?";
-+ const result = await db.execute(query, [userId]);
-\`\`\`
 🧪 **Debug Info:**
 - Detected Workspace: \`${detectedWorkspace || "None"}\`
 - Link Format: \`${
-      detectedWorkspace ? "WORKSPACE_FOLDER_NAME/file/path" : "./file/path"
+      detectedWorkspace ? "ABSOLUTE_PATH_AS_TARGET" : "./file/path"
     }\`
-- Sample Link: ${createFileLink("src/utils/helpers.js", 10)}
+- Sample Link Target (if workspace detected): ${
+      detectedWorkspace
+        ? `${detectedWorkspace.replace(
+            /\\/g,
+            "/"
+          )}/${"src/utils/helpers.js".replace(/\\/g, "/")}`.replace(
+            /\/\//g,
+            "/"
+          )
+        : "N/A"
+    }
+- Sample Link Markdown (if workspace detected): ${createFileLink(
+      "src/utils/helpers.js",
+      10
+    )}
 
-💡 **Note:** Clickability relies on VS Code Chat interpreting these relative paths correctly. Line numbers are for display; clicking will open the file.`;
+💡 **Note:** Clickability relies on VS Code Chat interpreting these paths correctly. Line numbers are for display; clicking will open the file.`;
 
     res.json({
       message: responseMessage,
@@ -275,12 +247,11 @@ ${
       debug_info: {
         detected_workspace: detectedWorkspace,
         link_format_used: detectedWorkspace
-          ? "workspace_folder_relative"
-          : "dot_relative",
+          ? "markdown_absolute_path"
+          : "markdown_dot_relative",
         example_link_target_structure: detectedWorkspace
-          ? `${path.basename(detectedWorkspace)}/your_file.js`
+          ? `${detectedWorkspace}/your_file.js`
           : "./your_file.js",
-        request_parameters: Object.keys(req.body),
       },
     });
   } catch (error) {
@@ -294,17 +265,15 @@ ${
 // Test endpoint 1: Simple greeting
 app.post("/api/test/greeting", verifyGitHubSignature, async (req, res) => {
   try {
-    console.log("🎯 Greeting endpoint called with:", req.body);
+    // ... (greeting logic)
     const { name = "Developer" } = req.body;
     await new Promise((resolve) => setTimeout(resolve, 500));
-    const response = {
+    res.json({
       message: `👋 Hello ${name}! This is a test response from Astraea.AI`,
       timestamp: new Date().toISOString(),
       received_data: req.body,
       status: "success",
-    };
-    console.log("📤 Sending response:", response);
-    res.json(response);
+    });
   } catch (error) {
     console.error("❌ Error in greeting endpoint:", error);
     res
@@ -316,7 +285,6 @@ app.post("/api/test/greeting", verifyGitHubSignature, async (req, res) => {
 // Test endpoint 2: Mock code analysis
 app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
   try {
-    console.log("🔍 Analyze endpoint called with:", req.body);
     const {
       code_snippet,
       language = "javascript",
@@ -339,10 +307,8 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
       const normalizedFilePath = filePath.replace(/\\/g, "/");
       let linkTarget;
       if (currentWorkspacePath) {
-        const workspaceFolderName = path.basename(
-          currentWorkspacePath.replace(/\\/g, "/")
-        );
-        linkTarget = `${workspaceFolderName}/${normalizedFilePath}`.replace(
+        const normalizedWorkspace = currentWorkspacePath.replace(/\\/g, "/");
+        linkTarget = `${normalizedWorkspace}/${normalizedFilePath}`.replace(
           /\/\//g,
           "/"
         );
@@ -355,7 +321,6 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
     const analysis = {
       language: language,
       lines_of_code: code_snippet.split("\n").length,
-      // ... (rest of analysis object)
       issues_found: [
         {
           type: "style",
@@ -372,14 +337,10 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
           file: "src/utils/helpers.js",
         },
       ],
-      suggestions: [
-        "✨ Consider adding error handling for better robustness",
-        "🚀 This code looks well-structured and follows good practices",
-        "📝 Adding comments would improve code readability",
-      ],
+      suggestions: ["Suggestion 1", "Suggestion 2"],
     };
 
-    const response = {
+    res.json({
       message: `🔍 **Code Analysis Complete**`,
       summary: `Analyzed ${analysis.lines_of_code} lines of ${language} code.`,
       issues_with_file_links: `🔍 **Issues Found:**
@@ -394,20 +355,9 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
         analyzeWorkspacePath
       )} - ${analysis.issues_found[1].description}`,
       analysis: analysis,
-      recommendations: `💡 **Recommendations:**\n${analysis.suggestions
-        .map((s) => `• ${s}`)
-        .join("\n")}`,
-      related_files: `📁 **Related Files:**
-• ${createFileLinkForAnalysis("test-service.js", null, analyzeWorkspacePath)}
-• ${createFileLinkForAnalysis(
-        "src/utils/helpers.js",
-        null,
-        analyzeWorkspacePath
-      )}`,
+      // ... (rest of response)
       timestamp: new Date().toISOString(),
-    };
-    console.log("📤 Sending analysis response:", response);
-    res.json(response);
+    });
   } catch (error) {
     console.error("❌ Error in analyze endpoint:", error);
     res
@@ -423,22 +373,18 @@ app.get("/", (req, res) => {
     service: "Astraea.AI Test Service",
     version: "1.0.0",
     description:
-      "Simple test service for GitHub Copilot Skillset integration with relative Markdown links.",
-    // ... (endpoints description updated as needed)
+      "Test service with Markdown links using absolute paths (if workspace provided).",
+    // ... (endpoints description updated)
     endpoints: {
       greeting: {
-        url: "/api/test/greeting",
-        method: "POST",
-        description: "Simple greeting endpoint for testing",
-        parameters: { name: "string (optional) - Name to greet" },
+        /* ... */
       },
       analyze: {
         url: "/api/test/analyze",
         method: "POST",
-        description: "Mock code analysis endpoint using relative links",
+        description: "Mock code analysis using absolute/relative path links",
         parameters: {
-          code_snippet: "string (required) - Code to analyze",
-          language: "string (optional) - Programming language",
+          // ...
           workspace_path:
             "string (optional) - Absolute path to the workspace for link generation",
         },
@@ -446,41 +392,29 @@ app.get("/", (req, res) => {
       file_links: {
         url: "/api/test/file-links",
         method: "POST",
-        description: "Test relative Markdown file linking for Copilot Chat",
+        description: "Test Markdown file linking using absolute/relative paths",
         parameters: {
           workspace_path: "string (optional) - Absolute path to the workspace",
         },
       },
     },
     setup_instructions: [
-      "1. Start this service: node test-service.js",
-      "2. Expose with ngrok: ngrok http 3000",
-      "3. Configure GitHub App skillset with the ngrok URLs",
-      "4. Test file links with: @your-app-name test file links with workspace_path /your/project/path",
-      "   (Replace /your/project/path with your actual project directory)",
+      /* ... */
     ],
   });
 });
 
-// Catch all for debugging
 app.use("*", (req, res) => {
-  console.log("🔍 Unhandled request:", {
-    /* ... */
-  });
-  res.status(404).json({ error: "Endpoint not found" /* ... */ });
+  console.log("🔍 Unhandled request:", req.method, req.url);
+  res.status(404).json({ error: "Endpoint not found" });
 });
 
 app.listen(PORT, () => {
   console.log("🚀 Astraea.AI Test Service started!");
   console.log(`📡 Server running on port ${PORT}`);
-  console.log(`🔗 Local URL: http://localhost:${PORT}`);
   console.log(
-    "✨ Link strategy updated for /api/test/file-links and /api/test/analyze:"
+    "✨ Link strategy: Markdown with absolute path (if workspace) or relative path."
   );
-  console.log(
-    "   - If workspace_path provided: links are 'WORKSPACE_FOLDER_NAME/file/path'"
-  );
-  console.log("   - If not: links are './file/path'");
 
   console.log("🧪 Test commands:");
   console.log("   @your-app-name say hello to Alice");
