@@ -194,29 +194,20 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
     // Simulate some processing time
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Helper function to create file links with multiple formats
+    // Helper function to create file links optimized for IDE integration
     const createFileLink = (filePath, line = null) => {
       const displayText = line ? `${filePath}:${line}` : filePath;
 
       if (detectedWorkspace) {
-        // Create VS Code clickable link with actual workspace path
-        // Ensure we have proper absolute path formatting
-        const workspacePath = detectedWorkspace.startsWith("/")
-          ? detectedWorkspace
-          : `/${detectedWorkspace}`;
-        const fullPath = `${workspacePath}/${filePath}`;
-        const vscodeUri = line
-          ? `vscode://file${fullPath}:${line}`
-          : `vscode://file${fullPath}`;
+        // Since vscode:// URIs don't work in Copilot Chat,
+        // use format that IDEs can recognize and act upon
+        const fullPath = `${detectedWorkspace}/${filePath}`;
 
-        // Try multiple formats to see what works in Copilot Chat
-        const markdownLink = `[${displayText}](${vscodeUri})`;
-        const backtickFormat = `\`${displayText}\``;
-
-        // Return both formats for testing
-        return `${markdownLink} (${backtickFormat})`;
+        // Use backticks with full path - many IDEs can Ctrl+Click these
+        const fullReference = line ? `${fullPath}:${line}` : fullPath;
+        return `\`${fullReference}\``;
       } else {
-        // Fallback to backticks if no workspace detected
+        // Fallback to relative path with backticks
         return `\`${displayText}\``;
       }
     };
@@ -235,17 +226,13 @@ ${
 - "test file links with workspace path /Users/username/myproject"`
 }
 
-📁 **File Links ${
-        detectedWorkspace
-          ? "(✅ VS Code Compatible - Should be Clickable!)"
-          : "(⚠️ Fallback Format - Not Clickable)"
-      }:**
+📁 **File Links (IDE Compatible Format):**
 • ${createFileLink("test-service.js")} - Main service file
 • ${createFileLink("package.json")} - Dependencies configuration  
 • ${createFileLink(".env")} - Environment variables
 • ${createFileLink("README.md")} - Documentation
 
-📍 **File Links with Line Numbers:**
+📍 **File Links with Line Numbers (Ctrl+Click in many IDEs):**
 • ${createFileLink("test-service.js", 1)} - File header
 • ${createFileLink("test-service.js", 25)} - Middleware setup
 • ${createFileLink("test-service.js", 150)} - File links endpoint
@@ -348,56 +335,44 @@ ${
 • ${createFileLink("src/utils/formatters.js")}
 
 🧪 **Debug Information:**
-- **Detected Workspace**: ${
-        detectedWorkspace || "None - Need workspace path for clickable links!"
-      }
-- **Link Format**: ${
-        detectedWorkspace
-          ? "VS Code URI (vscode://file/) - SHOULD BE CLICKABLE! 🎉"
-          : "Backticks fallback - NOT clickable 😞"
-      }
+- **Detected Workspace**: ${detectedWorkspace || "None"}
+- **Link Format**: Full absolute paths in backticks (IDE compatible)
 - **Sample Generated Link**: ${
         detectedWorkspace ? createFileLink("test-service.js", 150) : "N/A"
       }
-- **Raw Link Format**: ${
-        detectedWorkspace
-          ? `vscode://file/${
-              detectedWorkspace.startsWith("/")
-                ? detectedWorkspace
-                : `/${detectedWorkspace}`
-            }/test-service.js:150`
-          : "N/A"
-      }
+- **Copilot Chat Limitation**: vscode:// URIs are not supported in chat interface
+- **Alternative Method**: IDEs can often Ctrl+Click on full path references
 - **Request Parameters**: ${Object.keys(req.body).join(", ")}
-- **Editor Context Available**: ${editor_context ? "Yes" : "No"}
-- **Copilot Context Available**: ${copilot_context ? "Yes" : "No"}
 
-🔍 **Link Analysis:**
-${
-  detectedWorkspace
-    ? `
-**Expected Link Format**: [test-service.js:150](vscode://file/${
-        detectedWorkspace.startsWith("/")
-          ? detectedWorkspace
-          : `/${detectedWorkspace}`
-      }/test-service.js:150)
-**If this appears as plain text**: Copilot Chat may not support markdown links
-**If this appears clickable**: VS Code file linking is working!
-`
-    : "No workspace detected - cannot generate VS Code links"
-}
+💡 **How to Use These File References:**
 
-💡 **Alternative Testing:**
-Try copying this raw VS Code URI and pasting it in your browser address bar:
-\`vscode://file/${
+**Method 1: Copy & Navigate**
+1. Copy the full path: \`${
         detectedWorkspace
-          ? (detectedWorkspace.startsWith("/")
-              ? detectedWorkspace
-              : `/${detectedWorkspace}`) + "/test-service.js:150"
-          : "NO-WORKSPACE"
+          ? `${detectedWorkspace}/test-service.js:150`
+          : "path/to/file:line"
       }\`
+2. Use Ctrl+P (VS Code) or Ctrl+Shift+N (JetBrains) to open "Go to File"
+3. Paste the path and press Enter
 
-This should open VS Code and navigate to the file if the workspace path is correct.
+**Method 2: IDE Integration** 
+1. Some IDEs allow Ctrl+Click on full file paths
+2. Try Ctrl+Click on the file references above
+3. May work depending on your IDE's Copilot integration
+
+**Method 3: Command Palette**
+1. Copy file path: \`${
+        detectedWorkspace
+          ? `${detectedWorkspace}/test-service.js`
+          : "path/to/file"
+      }\`
+2. Open Command Palette (Ctrl+Shift+P)
+3. Type "Go to Line" and enter line number
+
+**Workspace Validation:**
+- Your workspace: \`${detectedWorkspace || "Not detected"}\`
+- Expected files: Should exist in the above directory
+- File paths are Windows compatible (using forward slashes work in most IDEs)
 
 🧪 **Testing Instructions:**
 1. ${
