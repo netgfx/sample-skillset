@@ -1,6 +1,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
+const path = require("path"); // Added path module
 require("dotenv").config();
 
 const app = express();
@@ -20,8 +21,9 @@ console.log("🔑 Using webhook secret:", GITHUB_WEBHOOK_SECRET);
 // Verify GitHub signature middleware
 function verifyGitHubSignature(req, res, next) {
   console.log("🧪 TESTING MODE: Skipping signature verification");
-  return next(); // Keep this for local testing if needed, but ensure it's removed/conditional for production
+  return next();
 
+  // ... (rest of signature verification logic remains the same)
   const signature =
     req.headers["x-hub-signature-256"] || req.headers["x-hub-signature"];
 
@@ -35,8 +37,6 @@ function verifyGitHubSignature(req, res, next) {
       "user-agent": req.headers["user-agent"],
       authorization: req.headers["authorization"] ? "Present" : "Not present",
     },
-    // Avoid logging full body in production if it can be large or sensitive
-    // body: req.body,
   });
 
   if (!signature) {
@@ -44,7 +44,7 @@ function verifyGitHubSignature(req, res, next) {
       "⚠️  No signature provided - allowing for testing (REMOVE FOR PRODUCTION)"
     );
     console.log("🔍 All headers:", req.headers);
-    return next(); // Remove this line for production
+    return next();
   }
 
   const payload = JSON.stringify(req.body);
@@ -148,7 +148,6 @@ app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
   });
 });
 
-// NEW: File links testing endpoint - accepting workspace path from Copilot
 app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
   try {
     console.log("🔗 File links endpoint called with:", req.body);
@@ -179,150 +178,79 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
     console.log("🔍 Workspace detection results:", {
       provided_workspace_path: workspace_path,
       detected_workspace: detectedWorkspace,
-      all_request_params: Object.keys(req.body),
     });
 
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // MODIFIED createFileLink function
     const createFileLink = (filePath, line = null) => {
       const displayText = line ? `${filePath}:${line}` : filePath;
+      // Normalize filePath slashes (e.g., "src/components/Header.vue")
+      const normalizedFilePath = filePath.replace(/\\/g, "/");
+      let linkTarget;
 
       if (detectedWorkspace) {
-        // Ensure forward slashes for URIs, even on Windows
-        const normalizedWorkspace = detectedWorkspace.replace(/\\/g, "/");
-        const normalizedFilePath = filePath.replace(/\\/g, "/");
-        const fullPath = `${normalizedWorkspace}/${normalizedFilePath}`;
-        let relativeLink = `./${filePath.replace(/\\/g, "/")}`;
-        let vscodeLink = `vscode://file/${fullPath}`;
-        if (line) {
-          vscodeLink += `:${line}`;
-        }
-        console.log(
-          `🔗 Creating VS Code link: [${displayText}](${relativeLink})`
+        // Get the workspace folder name (e.g., "sample-skillset")
+        const workspaceFolderName = path.basename(
+          detectedWorkspace.replace(/\\/g, "/")
         );
-        return `[${displayText}](${relativeLink})`;
+        // Construct link target like "sample-skillset/src/components/Header.vue"
+        linkTarget = `${workspaceFolderName}/${normalizedFilePath}`;
+        // Ensure no double slashes if normalizedFilePath somehow started with one
+        linkTarget = linkTarget.replace(/\/\//g, "/");
       } else {
-        // Fallback to relative Markdown link if no workspace path is detected
-        // This relies on VS Code Chat interpreting it relative to the open workspace
-        let relativeLink = `./${filePath.replace(/\\/g, "/")}`;
-        if (line) {
-          // Standard for adding line numbers to file URIs is #L<line>
-          // However, for vscode:// scheme it's :line. For relative paths in Markdown,
-          // there isn't a universal standard for line numbers directly in the URI.
-          // We'll keep the display text with line, but the link might just open the file.
-          // Or, we could try to append :line if VS Code handles it for relative paths too.
-          // For now, let's keep it simple and link to the file.
-          // Users can use the line number in the display text as a guide.
-          // Alternatively, if we assume it's still within a workspace context:
-          // relativeLink += `:${line}`; // This is speculative for relative Markdown links
-        }
-        console.log(
-          `🔗 Creating VS Code link: [${displayText}](${relativeLink})`
-        );
-        return `[${displayText}](${relativeLink})`;
-        // Original fallback: return `\`${displayText}\``;
+        // Fallback if no workspace_path: use "./path/to/file"
+        linkTarget = `./${normalizedFilePath}`;
       }
+
+      // Line numbers are not added to the linkTarget URI itself for these relative formats,
+      // as standard behavior for this in Markdown chat UIs is not guaranteed.
+      // The line number is already in displayText.
+      // console.log(`🔗 Creating link: [${displayText}](${linkTarget})`);
+      return `[${displayText}](${linkTarget})`;
     };
 
-    const response = {
-      message: `🔗 **VS Code File Link Testing Results (Markdown Links)**
+    const responseMessage = `🔗 **File Link Test Results (Relative Links)**
 
 ${
   detectedWorkspace
-    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\` - Links should be clickable using \`vscode://file/\` URIs.`
-    : `⚠️ **No Workspace Path Provided** - Attempting relative file links. Clickability may vary.
+    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\`. Links are formatted as \`WORKSPACE_FOLDER_NAME/path/to/file\`.`
+    : `⚠️ **No Workspace Path Provided**: Links are formatted as \`./path/to/file\`. Clickability may be limited.
 
-💡 **To Enable More Reliable Clickable Links**: Please provide your workspace path like this:
-- "test file links in workspace /Users/username/myproject"  
-- "test file links for project /Users/username/myproject"
-- "test file links with workspace path /Users/username/myproject"`
+💡 **For Best Results**: Ensure the workspace path is provided so links can be prefixed with the workspace folder name.`
 }
 
-📁 **File Links (IDE Compatible Format):**
-• ${createFileLink("test-service.js")} - Main service file
-• ${createFileLink("package.json")} - Dependencies configuration  
-• ${createFileLink(".env")} - Environment variables
-• ${createFileLink("README.md")} - Documentation
+📁 **File Links:**
+• ${createFileLink("test-service.js")}
+• ${createFileLink("package.json")}
+• ${createFileLink(".env")}
+• ${createFileLink("README.md")}
 
-📍 **File Links with Line Numbers (Ctrl+Click in many IDEs):**
-• ${createFileLink("test-service.js", 1)} - File header
-• ${createFileLink("test-service.js", 25)} - Middleware setup
-• ${createFileLink("test-service.js", 150)} - File links endpoint (approx.)
-• ${createFileLink("package.json", 5)} - Dependencies section
-• ${createFileLink("package.json", 10)} - Scripts section
+📍 **File Links with Line Numbers (Display Only):**
+• ${createFileLink("test-service.js", 1)}
+• ${createFileLink("test-service.js", 25)}
+• ${createFileLink("test-service.js", 150)}
+• ${createFileLink("package.json", 5)}
+• ${createFileLink("package.json", 10)}
 
 📂 **Directory Structure Examples:**
-• ${createFileLink("src/components/Header.vue")} - Header component
-• ${createFileLink("src/utils/helpers.js", 45)} - Utility functions
-• ${createFileLink("src/styles/main.css", 12)} - Main stylesheet  
-• ${createFileLink("tests/unit/service.test.js", 67)} - Unit tests
-• ${createFileLink("config/webpack.config.js", 89)} - Build configuration
+• ${createFileLink("src/components/Header.vue")}
+• ${createFileLink("src/utils/helpers.js", 45)}
+• ${createFileLink("src/styles/main.css", 12)}
+• ${createFileLink("tests/unit/service.test.js", 67)}
+• ${createFileLink("config/webpack.config.js", 89)}
 
-🔍 **Mock Code Review with ${
-        detectedWorkspace ? "Clickable" : "Potentially Clickable Relative"
-      } File Links:**
-
+🔍 **Mock Code Review (Illustrative Links):**
 **Security Issues:**
-- SQL injection vulnerability in ${createFileLink(
-        "test-service.js", // Assuming handleUserInput is around line 95
-        95 // If you know the function name, you could try: "the `handleUserInput` function in test-service.js"
-      )} - User input not sanitized
-- Missing authentication check in ${createFileLink(
-        "src/auth/middleware.js",
-        15
-      )} - Endpoint accessible without auth
-- Hardcoded credentials in ${createFileLink(
-        ".env.example",
-        5
-      )} - Move to secure storage
+- SQL injection in ${createFileLink("test-service.js", 95)}
+- Auth issue in ${createFileLink("src/auth/middleware.js", 15)}
+- Credentials in ${createFileLink(".env.example", 5)}
 
-**Performance Issues:**  
-- Database query in loop detected in ${createFileLink(
-        "src/data/repository.js",
-        23
-      )} - Consider batch operations
-- Large bundle size in ${createFileLink(
-        "src/components/Dashboard.vue",
-        150
-      )} - Implement code splitting
-- Memory leak in ${createFileLink(
-        "src/services/websocket.js",
-        78
-      )} - Fix event listener cleanup
+📋 **Next Steps (Illustrative Links):**
+🚨 Fix: ${createFileLink("test-service.js", 95)}
+⚠️ Add auth: ${createFileLink("src/auth/middleware.js", 15)}
+📋 Optimize: ${createFileLink("src/data/repository.js", 23)}
 
-**Code Quality Issues:**
-- Missing error handling in ${createFileLink(
-        "test-service.js", // Assuming an error handling section is around line 200
-        200
-      )} - Add try-catch block
-- Unused import in ${createFileLink(
-        "src/utils/formatters.js",
-        5
-      )} - Remove unused dependencies
-- Inconsistent naming in ${createFileLink(
-        "src/api/users.js",
-        34
-      )} - Use camelCase convention
-
-📋 **Next Steps with ${
-        detectedWorkspace ? "Clickable" : "Potentially Clickable Relative"
-      } Links:**
-🚨 **BLOCKING**: Fix SQL injection in ${createFileLink("test-service.js", 95)}
-⚠️ **HIGH PRIORITY**: Add authentication to ${createFileLink(
-        "src/auth/middleware.js",
-        15
-      )}
-📋 **MEDIUM PRIORITY**: Optimize queries in ${createFileLink(
-        "src/data/repository.js",
-        23
-      )}
-ℹ️ **LOW PRIORITY**: Clean up imports in ${createFileLink(
-        "src/utils/formatters.js",
-        5
-      )}
-
-💡 **Code Suggestion with Diff:**
+💡 **Code Suggestion (Diff):**
 \`\`\`diff
 --- a/test-service.js
 +++ b/test-service.js
@@ -331,98 +259,30 @@ ${
 + const query = "SELECT * FROM users WHERE id = ?";
 + const result = await db.execute(query, [userId]);
 \`\`\`
+🧪 **Debug Info:**
+- Detected Workspace: \`${detectedWorkspace || "None"}\`
+- Link Format: \`${
+      detectedWorkspace ? "WORKSPACE_FOLDER_NAME/file/path" : "./file/path"
+    }\`
+- Sample Link: ${createFileLink("src/utils/helpers.js", 10)}
 
-📁 **All Referenced Files:**
-• ${createFileLink("test-service.js")}
-• ${createFileLink("package.json")}
-• ${createFileLink(".env")} 
-• ${createFileLink("README.md")}
-• ${createFileLink("src/components/Header.vue")}
-• ${createFileLink("src/utils/helpers.js")}
-• ${createFileLink("src/styles/main.css")}
-• ${createFileLink("tests/unit/service.test.js")}
-• ${createFileLink("config/webpack.config.js")}
-• ${createFileLink("src/data/repository.js")}
-• ${createFileLink("src/components/Dashboard.vue")}
-• ${createFileLink("src/auth/middleware.js")}
-• ${createFileLink("src/services/websocket.js")}
-• ${createFileLink("src/api/users.js")}
-• ${createFileLink("src/utils/formatters.js")}
+💡 **Note:** Clickability relies on VS Code Chat interpreting these relative paths correctly. Line numbers are for display; clicking will open the file.`;
 
-🧪 **Debug Information:**
-- **Detected Workspace**: ${detectedWorkspace || "None"}
-- **Link Format**: Markdown links with \`vscode://file/\` URIs (or relative paths)
-- **Sample Generated Link**: ${
-        detectedWorkspace
-          ? createFileLink("test-service.js", 150)
-          : createFileLink("test-service.js")
-      }
-- **Copilot Chat Suggestion**: Using Markdown links like [text](vscode://file/path) or [text](./path)
-- **Request Parameters**: ${Object.keys(req.body).join(", ")}
-
-💡 **How to Use These File References:**
-These links should now be clickable directly in the Copilot Chat UI if the Markdown rendering and URI schemes are supported as suggested.
-
-**Workspace Validation:**
-- Your workspace: \`${detectedWorkspace || "Not detected"}\`
-- Expected files: Should exist in the above directory
-
-🧪 **Testing Instructions:**
-1. ${
-        detectedWorkspace
-          ? "🎉 Click on any file reference above - they should be clickable and navigate to files in VS Code!"
-          : '💡 Try again with workspace path: "@astraea-ai test file links in workspace /Users/yourusername/yourproject" to enable absolute path links.'
-      }
-2. ${
-        detectedWorkspace
-          ? "File links should navigate to actual files in your IDE."
-          : "Relative links are being used; clickability depends on VS Code Chat's interpretation of these within your workspace."
-      }
-3. ${
-        detectedWorkspace
-          ? "Line number links should jump to specific lines."
-          : "Line numbers are displayed but may not be part of the relative link's navigation."
-      }
-
-${
-  detectedWorkspace
-    ? "🎉 **SUCCESS (Expected)**: VS Code clickable file links using Markdown should be ACTIVE!"
-    : "💡 **Next Steps**: Provide workspace path for more reliable absolute path links."
-}
-
-**How to Provide Workspace Path:**
-Try these commands:
-- \`@astraea-ai test file links in workspace /Users/yourusername/myproject\`
-- \`@astraea-ai test file links for project /Users/yourusername/myproject\`  
-- \`@astraea-ai test file links with workspace path /Users/yourusername/myproject\`
-- Replace \`/Users/yourusername/myproject\` with your actual project directory`,
-
+    res.json({
+      message: responseMessage,
       timestamp: new Date().toISOString(),
       status: "success",
       debug_info: {
         detected_workspace: detectedWorkspace,
-        link_format: detectedWorkspace
-          ? "markdown_vscode_uri"
-          : "markdown_relative",
-        clickable: true, // Assuming Markdown links will be clickable
+        link_format_used: detectedWorkspace
+          ? "workspace_folder_relative"
+          : "dot_relative",
+        example_link_target_structure: detectedWorkspace
+          ? `${path.basename(detectedWorkspace)}/your_file.js`
+          : "./your_file.js",
         request_parameters: Object.keys(req.body),
-        workspace_sources_checked: [
-          "workspace_path",
-          "workspace_root",
-          "project_path",
-          "repository_path",
-          "editor_context.workspace_path",
-          "copilot_context.workspace.rootPath",
-        ],
       },
-    };
-
-    console.log(
-      "📤 Sending file links response with workspace:",
-      detectedWorkspace,
-      "using Markdown links."
-    );
-    res.json(response);
+    });
   } catch (error) {
     console.error("❌ Error in file links endpoint:", error);
     res
@@ -457,7 +317,12 @@ app.post("/api/test/greeting", verifyGitHubSignature, async (req, res) => {
 app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
   try {
     console.log("🔍 Analyze endpoint called with:", req.body);
-    const { code_snippet, language = "javascript" } = req.body;
+    const {
+      code_snippet,
+      language = "javascript",
+      workspace_path: analyzeWorkspacePath,
+    } = req.body;
+
     if (!code_snippet) {
       return res
         .status(400)
@@ -465,57 +330,80 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // For this endpoint, we'll use a simplified createFileLink for brevity
-    // or assume a fixed workspace for demonstration if needed.
-    // For now, let's assume files are relative and use backticks as it's not the focus here.
-    const mockCreateFileLink = (file, line) => `\`${file}:${line}\``; // Simple backtick version for this endpoint
+    const createFileLinkForAnalysis = (
+      filePath,
+      line = null,
+      currentWorkspacePath
+    ) => {
+      const displayText = line ? `${filePath}:${line}` : filePath;
+      const normalizedFilePath = filePath.replace(/\\/g, "/");
+      let linkTarget;
+      if (currentWorkspacePath) {
+        const workspaceFolderName = path.basename(
+          currentWorkspacePath.replace(/\\/g, "/")
+        );
+        linkTarget = `${workspaceFolderName}/${normalizedFilePath}`.replace(
+          /\/\//g,
+          "/"
+        );
+      } else {
+        linkTarget = `./${normalizedFilePath}`;
+      }
+      return `[${displayText}](${linkTarget})`;
+    };
 
     const analysis = {
       language: language,
       lines_of_code: code_snippet.split("\n").length,
-      estimated_complexity: Math.floor(Math.random() * 10) + 1,
+      // ... (rest of analysis object)
+      issues_found: [
+        {
+          type: "style",
+          severity: "low",
+          description: "Use const",
+          line: 2,
+          file: "test-service.js",
+        },
+        {
+          type: "performance",
+          severity: "medium",
+          description: "Loop optimization",
+          line: 50,
+          file: "src/utils/helpers.js",
+        },
+      ],
       suggestions: [
         "✨ Consider adding error handling for better robustness",
         "🚀 This code looks well-structured and follows good practices",
         "📝 Adding comments would improve code readability",
       ],
-      issues_found: [
-        {
-          type: "style",
-          severity: "low",
-          description: "Consider using const instead of let where possible",
-          line: Math.floor(Math.random() * 5) + 1,
-          file: "test-service.js", // Example file
-        },
-        {
-          type: "performance",
-          severity: "medium",
-          description: "Loop optimization opportunity detected",
-          line: Math.floor(Math.random() * 5) + 1,
-          file: "test-file.js", // Example file
-        },
-      ],
     };
 
     const response = {
       message: `🔍 **Code Analysis Complete**`,
-      summary: `Analyzed ${analysis.lines_of_code} lines of ${language} code`,
+      summary: `Analyzed ${analysis.lines_of_code} lines of ${language} code.`,
       issues_with_file_links: `🔍 **Issues Found:**
-• **Style Issue** in ${mockCreateFileLink(
+• Style: ${createFileLinkForAnalysis(
         analysis.issues_found[0].file,
-        analysis.issues_found[0].line
-      )}: ${analysis.issues_found[0].description}
-• **Performance Issue** in ${mockCreateFileLink(
+        analysis.issues_found[0].line,
+        analyzeWorkspacePath
+      )} - ${analysis.issues_found[0].description}
+• Perf: ${createFileLinkForAnalysis(
         analysis.issues_found[1].file,
-        analysis.issues_found[1].line
-      )}: ${analysis.issues_found[1].description}`,
+        analysis.issues_found[1].line,
+        analyzeWorkspacePath
+      )} - ${analysis.issues_found[1].description}`,
       analysis: analysis,
       recommendations: `💡 **Recommendations:**\n${analysis.suggestions
         .map((s) => `• ${s}`)
         .join("\n")}`,
       related_files: `📁 **Related Files:**
-• \`test-service.js\` - Main service implementation
-• \`test-file.js\` - Utility functions`,
+• ${createFileLinkForAnalysis("test-service.js", null, analyzeWorkspacePath)}
+• ${createFileLinkForAnalysis(
+        "src/utils/helpers.js",
+        null,
+        analyzeWorkspacePath
+      )}`,
       timestamp: new Date().toISOString(),
     };
     console.log("📤 Sending analysis response:", response);
@@ -535,26 +423,41 @@ app.get("/", (req, res) => {
     service: "Astraea.AI Test Service",
     version: "1.0.0",
     description:
-      "Simple test service for GitHub Copilot Skillset integration with Markdown links",
+      "Simple test service for GitHub Copilot Skillset integration with relative Markdown links.",
+    // ... (endpoints description updated as needed)
     endpoints: {
       greeting: {
-        /* ... */
+        url: "/api/test/greeting",
+        method: "POST",
+        description: "Simple greeting endpoint for testing",
+        parameters: { name: "string (optional) - Name to greet" },
       },
       analyze: {
-        /* ... */
+        url: "/api/test/analyze",
+        method: "POST",
+        description: "Mock code analysis endpoint using relative links",
+        parameters: {
+          code_snippet: "string (required) - Code to analyze",
+          language: "string (optional) - Programming language",
+          workspace_path:
+            "string (optional) - Absolute path to the workspace for link generation",
+        },
       },
       file_links: {
         url: "/api/test/file-links",
         method: "POST",
-        description: "Test Markdown file linking for Copilot Chat",
+        description: "Test relative Markdown file linking for Copilot Chat",
         parameters: {
           workspace_path: "string (optional) - Absolute path to the workspace",
-          // ... other path parameters
         },
       },
     },
     setup_instructions: [
-      /* ... */
+      "1. Start this service: node test-service.js",
+      "2. Expose with ngrok: ngrok http 3000",
+      "3. Configure GitHub App skillset with the ngrok URLs",
+      "4. Test file links with: @your-app-name test file links with workspace_path /your/project/path",
+      "   (Replace /your/project/path with your actual project directory)",
     ],
   });
 });
@@ -564,9 +467,7 @@ app.use("*", (req, res) => {
   console.log("🔍 Unhandled request:", {
     /* ... */
   });
-  res.status(404).json({
-    /* ... */
-  });
+  res.status(404).json({ error: "Endpoint not found" /* ... */ });
 });
 
 app.listen(PORT, () => {
@@ -574,9 +475,12 @@ app.listen(PORT, () => {
   console.log(`📡 Server running on port ${PORT}`);
   console.log(`🔗 Local URL: http://localhost:${PORT}`);
   console.log(
-    "✨ Markdown link functionality for file paths implemented in /api/test/file-links."
+    "✨ Link strategy updated for /api/test/file-links and /api/test/analyze:"
   );
-  // ... rest of the startup logs
+  console.log(
+    "   - If workspace_path provided: links are 'WORKSPACE_FOLDER_NAME/file/path'"
+  );
+  console.log("   - If not: links are './file/path'");
 
   console.log("🧪 Test commands:");
   console.log("   @your-app-name say hello to Alice");
