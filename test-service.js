@@ -160,32 +160,33 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
     // Simulate some processing time
     await new Promise((resolve) => setTimeout(resolve, 500));
 
+    // Return a flat response structure that Copilot can display properly
     const response = {
-      message: "🔗 **File Link Testing Results**",
-      summary:
-        "Testing GitHub Copilot file linking functionality with various file reference formats",
+      message: `🔗 **File Link Testing Results**
 
-      basic_file_links: `📁 **Basic File Links:**
+Testing GitHub Copilot file linking functionality with various file reference formats.
+
+📁 **Basic File Links:**
 • \`test-service.js\` - Main service file
 • \`test-file.js\` - Test utility file
 • \`package.json\` - Dependencies configuration
-• \`README.md\` - Documentation file`,
+• \`README.md\` - Documentation file
 
-      file_links_with_lines: `📍 **File Links with Line Numbers:**
+📍 **File Links with Line Numbers:**
 • \`test-service.js:1\` - File header
 • \`test-service.js:25\` - Middleware setup
 • \`test-service.js:150\` - File links endpoint  
 • \`test-file.js:10\` - Helper function
-• \`test-file.js:25-30\` - Error handling block`,
+• \`test-file.js:25-30\` - Error handling block
 
-      directory_structure: `📂 **Directory Structure:**
+📂 **Directory Structure:**
 • \`src/components/Header.vue\` - Header component
 • \`src/utils/helpers.js:45\` - Utility functions
 • \`src/styles/main.css:12-20\` - Main stylesheet
 • \`tests/unit/service.test.js:67\` - Unit tests
-• \`config/webpack.config.js:89\` - Build configuration`,
+• \`config/webpack.config.js:89\` - Build configuration
 
-      code_review_example: `🔍 **Mock Code Review with File Links:**
+🔍 **Mock Code Review with File Links:**
 
 **Security Issues:**
 - SQL injection vulnerability found in \`test-service.js:95\` - User input not sanitized
@@ -198,15 +199,15 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 **Code Quality Issues:**
 - Missing error handling in \`test-service.js:200\` - Add try-catch block
 - Unused import in \`test-file.js:5\` - Remove unused dependencies
-- Inconsistent naming in \`src/utils/formatters.js:12\` - Use camelCase convention`,
+- Inconsistent naming in \`src/utils/formatters.js:12\` - Use camelCase convention
 
-      next_steps: `📋 **Next Steps with File References:**
+📋 **Next Steps with File References:**
 🚨 **BLOCKING**: Fix SQL injection in \`test-service.js:95\`
 ⚠️ **HIGH PRIORITY**: Add authentication to \`test-file.js:15\`  
 📋 **MEDIUM PRIORITY**: Optimize queries in \`src/data/repository.js:23-35\`
-ℹ️ **LOW PRIORITY**: Clean up imports in \`test-file.js:5\``,
+ℹ️ **LOW PRIORITY**: Clean up imports in \`test-file.js:5\`
 
-      diff_example: `💡 **Code Suggestion with Diff:**
+💡 **Code Suggestion with Diff:**
 \`\`\`diff
 --- a/test-service.js
 +++ b/test-service.js
@@ -214,9 +215,9 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 - const query = "SELECT * FROM users WHERE id = " + userId;
 + const query = "SELECT * FROM users WHERE id = ?";
 + const result = await db.execute(query, [userId]);
-\`\`\``,
+\`\`\`
 
-      files_summary: `📁 **All Referenced Files:**
+📁 **All Referenced Files:**
 • \`test-service.js\`
 • \`test-file.js\`  
 • \`package.json\`
@@ -228,9 +229,9 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 • \`config/webpack.config.js\`
 • \`src/data/repository.js\`
 • \`src/components/Dashboard.vue\`
-• \`src/utils/formatters.js\``,
+• \`src/utils/formatters.js\`
 
-      test_instructions: `🧪 **Testing Instructions:**
+🧪 **Testing Instructions:**
 1. Click on any file reference above (they should be clickable in Copilot Chat)
 2. File links should navigate to the actual files in your IDE
 3. Line number links should jump to specific lines
@@ -242,7 +243,6 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 - Files without line numbers should just open the file`,
 
       timestamp: new Date().toISOString(),
-      received_data: req.body,
       status: "success",
     };
 
