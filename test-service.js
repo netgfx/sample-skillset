@@ -194,17 +194,27 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
     // Simulate some processing time
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Helper function to create file links
+    // Helper function to create file links with multiple formats
     const createFileLink = (filePath, line = null) => {
       const displayText = line ? `${filePath}:${line}` : filePath;
 
       if (detectedWorkspace) {
         // Create VS Code clickable link with actual workspace path
-        const fullPath = `${detectedWorkspace}/${filePath}`;
+        // Ensure we have proper absolute path formatting
+        const workspacePath = detectedWorkspace.startsWith("/")
+          ? detectedWorkspace
+          : `/${detectedWorkspace}`;
+        const fullPath = `${workspacePath}/${filePath}`;
         const vscodeUri = line
           ? `vscode://file${fullPath}:${line}`
           : `vscode://file${fullPath}`;
-        return `[${displayText}](${vscodeUri})`;
+
+        // Try multiple formats to see what works in Copilot Chat
+        const markdownLink = `[${displayText}](${vscodeUri})`;
+        const backtickFormat = `\`${displayText}\``;
+
+        // Return both formats for testing
+        return `${markdownLink} (${backtickFormat})`;
       } else {
         // Fallback to backticks if no workspace detected
         return `\`${displayText}\``;
@@ -217,11 +227,18 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 ${
   detectedWorkspace
     ? `✅ **Workspace Detected**: \`${detectedWorkspace}\``
-    : `⚠️ **No Workspace Path Provided** - Using fallback format`
+    : `⚠️ **No Workspace Path Provided** - File links shown in fallback format (not clickable in your IDE).
+
+💡 **To Enable Clickable Links**: Please provide your workspace path like this:
+- "test file links in workspace /Users/username/myproject"  
+- "test file links for project /Users/username/myproject"
+- "test file links with workspace path /Users/username/myproject"`
 }
 
 📁 **File Links ${
-        detectedWorkspace ? "(VS Code Compatible)" : "(Fallback Format)"
+        detectedWorkspace
+          ? "(✅ VS Code Compatible - Should be Clickable!)"
+          : "(⚠️ Fallback Format - Not Clickable)"
       }:**
 • ${createFileLink("test-service.js")} - Main service file
 • ${createFileLink("package.json")} - Dependencies configuration  
@@ -242,7 +259,9 @@ ${
 • ${createFileLink("tests/unit/service.test.js", 67)} - Unit tests
 • ${createFileLink("config/webpack.config.js", 89)} - Build configuration
 
-🔍 **Mock Code Review with Dynamic File Links:**
+🔍 **Mock Code Review with ${
+        detectedWorkspace ? "Clickable" : "Fallback"
+      } File Links:**
 
 **Security Issues:**
 - SQL injection vulnerability found in ${createFileLink(
@@ -286,7 +305,7 @@ ${
         34
       )} - Use camelCase convention
 
-📋 **Next Steps with Dynamic Links:**
+📋 **Next Steps with ${detectedWorkspace ? "Clickable" : "Fallback"} Links:**
 🚨 **BLOCKING**: Fix SQL injection in ${createFileLink("test-service.js", 95)}
 ⚠️ **HIGH PRIORITY**: Add authentication to ${createFileLink(
         "src/auth/middleware.js",
@@ -329,42 +348,93 @@ ${
 • ${createFileLink("src/utils/formatters.js")}
 
 🧪 **Debug Information:**
-- **Detected Workspace**: ${detectedWorkspace || "None"}
+- **Detected Workspace**: ${
+        detectedWorkspace || "None - Need workspace path for clickable links!"
+      }
 - **Link Format**: ${
         detectedWorkspace
-          ? "VS Code URI (vscode://file/)"
-          : "Backticks fallback"
+          ? "VS Code URI (vscode://file/) - SHOULD BE CLICKABLE! 🎉"
+          : "Backticks fallback - NOT clickable 😞"
+      }
+- **Sample Generated Link**: ${
+        detectedWorkspace ? createFileLink("test-service.js", 150) : "N/A"
+      }
+- **Raw Link Format**: ${
+        detectedWorkspace
+          ? `vscode://file/${
+              detectedWorkspace.startsWith("/")
+                ? detectedWorkspace
+                : `/${detectedWorkspace}`
+            }/test-service.js:150`
+          : "N/A"
       }
 - **Request Parameters**: ${Object.keys(req.body).join(", ")}
 - **Editor Context Available**: ${editor_context ? "Yes" : "No"}
 - **Copilot Context Available**: ${copilot_context ? "Yes" : "No"}
 
+🔍 **Link Analysis:**
+${
+  detectedWorkspace
+    ? `
+**Expected Link Format**: [test-service.js:150](vscode://file/${
+        detectedWorkspace.startsWith("/")
+          ? detectedWorkspace
+          : `/${detectedWorkspace}`
+      }/test-service.js:150)
+**If this appears as plain text**: Copilot Chat may not support markdown links
+**If this appears clickable**: VS Code file linking is working!
+`
+    : "No workspace detected - cannot generate VS Code links"
+}
+
+💡 **Alternative Testing:**
+Try copying this raw VS Code URI and pasting it in your browser address bar:
+\`vscode://file/${
+        detectedWorkspace
+          ? (detectedWorkspace.startsWith("/")
+              ? detectedWorkspace
+              : `/${detectedWorkspace}`) + "/test-service.js:150"
+          : "NO-WORKSPACE"
+      }\`
+
+This should open VS Code and navigate to the file if the workspace path is correct.
+
 🧪 **Testing Instructions:**
 1. ${
         detectedWorkspace
-          ? "Click on any file reference above - they should be clickable in VS Code!"
-          : "Provide workspace_path parameter to enable VS Code clickable links"
+          ? "🎉 Click on any file reference above - they should be clickable and navigate to files in VS Code!"
+          : '💡 Try again with workspace path: "@astraea-ai test file links in workspace /Users/yourusername/yourproject"'
       }
-2. File links should navigate to the actual files in your IDE
-3. Line number links should jump to specific lines
-4. ${
+2. ${
         detectedWorkspace
-          ? "VS Code URI links are active - test the navigation!"
-          : "Try again with workspace_path parameter for full functionality"
+          ? "File links should navigate to actual files in your IDE"
+          : "Provide your actual project directory path to enable clickable links"
+      }
+3. ${
+        detectedWorkspace
+          ? "Line number links should jump to specific lines"
+          : 'Example: "test file links for project /Users/dev/myapp"'
       }
 
+${
+  detectedWorkspace
+    ? "🎉 **SUCCESS**: VS Code clickable file links are ACTIVE!"
+    : "💡 **Next Steps**: Provide workspace path to enable clickable file navigation"
+}
+
 **How to Provide Workspace Path:**
-Include one of these parameters in your request:
-- \`workspace_path\`: "/Users/username/myproject"
-- \`workspace_root\`: "/Users/username/myproject"  
-- \`project_path\`: "/Users/username/myproject"
-- \`editor_context\`: {"workspace_path": "/Users/username/myproject"}`,
+Try these commands:
+- \`@astraea-ai test file links in workspace /Users/yourusername/myproject\`
+- \`@astraea-ai test file links for project /Users/yourusername/myproject\`  
+- \`@astraea-ai test file links with workspace path /Users/yourusername/myproject\`
+- Replace \`/Users/yourusername/myproject\` with your actual project directory`,
 
       timestamp: new Date().toISOString(),
       status: "success",
       debug_info: {
         detected_workspace: detectedWorkspace,
         link_format: detectedWorkspace ? "vscode_uri" : "backticks",
+        clickable: detectedWorkspace ? true : false,
         request_parameters: Object.keys(req.body),
         workspace_sources_checked: [
           "workspace_path",
