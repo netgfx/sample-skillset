@@ -173,19 +173,45 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
       let linkTarget;
 
       if (detectedWorkspace) {
-        const normalizedWorkspace = detectedWorkspace.replace(/\\/g, "/");
-        // Construct absolute path: /path/to/workspace/src/file.js
-        linkTarget = `${normalizedWorkspace}/${normalizedFilePath}`;
-        linkTarget = linkTarget.replace(/\/\//g, "/"); // Ensure no double slashes
-        // Optionally, prefix with file:/// if plain absolute path doesn't work
-        //linkTarget = `file://${linkTarget}`; // Note: file:// (two slashes for local) or file:/// (three for UNC/empty authority)
-        // For local files, file:///path is common.
+        let normalizedWorkspace = detectedWorkspace.replace(/\\/g, "/");
+
+        // Ensure workspace path starts with a slash if it's a POSIX path
+        // For Windows paths like C:/... this is fine.
+        if (
+          process.platform !== "win32" &&
+          !normalizedWorkspace.startsWith("/")
+        ) {
+          // This case might indicate an issue with how detectedWorkspace is formed
+          // or if it's a relative path when it shouldn't be.
+          // For now, we'll assume detectedWorkspace is a valid absolute path.
+        }
+
+        let absolutePath = `${normalizedWorkspace}/${normalizedFilePath}`;
+        absolutePath = absolutePath.replace(/\/\//g, "/"); // Ensure no double slashes
+
+        // Use file:/// scheme
+        linkTarget = `file://${absolutePath}`; // Using file:// which is common, file:/// is also an option. Test both if needed.
+        // For local files, file:///C:/path or file:///path (POSIX)
+        // Let's be explicit with three slashes for absolute paths.
+        linkTarget = `file:///${
+          absolutePath.startsWith("/")
+            ? absolutePath.substring(1)
+            : absolutePath
+        }`;
+        // If absolutePath was /Users/..., linkTarget becomes file:///Users/...
+        // If absolutePath was C:/Users/..., linkTarget becomes file:///C:/Users/...
+
+        if (line) {
+          // For file:/// URIs, line numbers are typically appended with #L<line>
+          // However, VS Code might be more flexible or prefer :line for its internal handling
+          // Let's try with #L<line> first as it's more standard for file URIs.
+          // If this doesn't work for navigation, we can test :line with file:///
+          linkTarget += `#L${line}`;
+        }
       } else {
         linkTarget = `./${normalizedFilePath}`; // Fallback
       }
 
-      // Line numbers are not standard in plain path or file:/// URIs for Markdown link targets.
-      // They remain in displayText.
       // console.log(`🔗 Creating link: [${displayText}](${linkTarget})`);
       return `[${displayText}](${linkTarget})`;
     };
