@@ -245,6 +245,7 @@ ${
 • ${createFileLink("src/styles/main.css", 12)} - Main stylesheet  
 • ${createFileLink("tests/unit/service.test.js", 67)} - Unit tests
 • ${createFileLink("config/webpack.config.js", 89)} - Build configuration
+• SQL injection vulnerability found in the ${`handleUserInput`} function within ${`test-service.js`} (around line 95) - User input not sanitized
 
 🔍 **Mock Code Review with ${
         detectedWorkspace ? "Clickable" : "Fallback"
