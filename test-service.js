@@ -193,12 +193,15 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
         const normalizedWorkspace = detectedWorkspace.replace(/\\/g, "/");
         const normalizedFilePath = filePath.replace(/\\/g, "/");
         const fullPath = `${normalizedWorkspace}/${normalizedFilePath}`;
-
+        let relativeLink = `./${filePath.replace(/\\/g, "/")}`;
         let vscodeLink = `vscode://file/${fullPath}`;
         if (line) {
           vscodeLink += `:${line}`;
         }
-        return `[${displayText}](${vscodeLink})`;
+        console.log(
+          `🔗 Creating VS Code link: [${displayText}](${relativeLink})`
+        );
+        return `[${displayText}](${relativeLink})`;
       } else {
         // Fallback to relative Markdown link if no workspace path is detected
         // This relies on VS Code Chat interpreting it relative to the open workspace
@@ -214,6 +217,9 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
           // Alternatively, if we assume it's still within a workspace context:
           // relativeLink += `:${line}`; // This is speculative for relative Markdown links
         }
+        console.log(
+          `🔗 Creating VS Code link: [${displayText}](${relativeLink})`
+        );
         return `[${displayText}](${relativeLink})`;
         // Original fallback: return `\`${displayText}\``;
       }
