@@ -251,10 +251,7 @@ ${
       } File Links:**
 
 **Security Issues:**
-- SQL injection vulnerability found in ${createFileLink(
-        "test-service.js",
-        95
-      )} - User input not sanitized
+- SQL injection vulnerability found in the ${`handleUserInput`} function within ${`test-service.js`} (around line 95) - User input not sanitized
 - Missing authentication check in ${createFileLink(
         "src/auth/middleware.js",
         15
