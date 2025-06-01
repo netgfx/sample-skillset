@@ -152,61 +152,235 @@ app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
   });
 });
 
-// NEW: File links testing endpoint - using real files
+// NEW: File links testing endpoint - accepting workspace path from Copilot
 app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
   try {
     console.log("🔗 File links endpoint called with:", req.body);
 
+    // Extract workspace path from request - Copilot might provide this
+    const {
+      workspace_path,
+      workspace_root,
+      project_path,
+      repository_path,
+      editor_context,
+      // Also check nested context objects that Copilot might send
+      copilot_context,
+      vscode_context,
+      ...otherParams
+    } = req.body;
+
+    // Try to detect workspace path from various possible sources
+    const detectedWorkspace =
+      workspace_path ||
+      workspace_root ||
+      project_path ||
+      repository_path ||
+      editor_context?.workspace_path ||
+      editor_context?.rootPath ||
+      copilot_context?.workspace?.rootPath ||
+      copilot_context?.workspaceFolder ||
+      vscode_context?.workspace?.rootPath ||
+      null;
+
+    console.log("🔍 Workspace detection results:", {
+      provided_workspace_path: workspace_path,
+      detected_workspace: detectedWorkspace,
+      all_request_params: Object.keys(req.body),
+      editor_context: editor_context,
+      copilot_context: copilot_context,
+    });
+
     // Simulate some processing time
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Return a response with REAL files that exist in your project
+    // Helper function to create file links
+    const createFileLink = (filePath, line = null) => {
+      const displayText = line ? `${filePath}:${line}` : filePath;
+
+      if (detectedWorkspace) {
+        // Create VS Code clickable link with actual workspace path
+        const fullPath = `${detectedWorkspace}/${filePath}`;
+        const vscodeUri = line
+          ? `vscode://file${fullPath}:${line}`
+          : `vscode://file${fullPath}`;
+        return `[${displayText}](${vscodeUri})`;
+      } else {
+        // Fallback to backticks if no workspace detected
+        return `\`${displayText}\``;
+      }
+    };
+
     const response = {
-      message: `🔗 **File Link Testing Results**
+      message: `🔗 **VS Code File Link Testing Results**
 
-Testing GitHub Copilot file linking functionality with files that actually exist in your project.
+${
+  detectedWorkspace
+    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\``
+    : `⚠️ **No Workspace Path Provided** - Using fallback format`
+}
 
-📁 **Real Files in Your Project:**
-• \`test-service.js\` - This current service file
-• \`package.json\` - Your project dependencies
-• \`.env\` - Environment configuration (if it exists)
-• \`.gitignore\` - Git ignore file (if it exists)
+📁 **File Links ${
+        detectedWorkspace ? "(VS Code Compatible)" : "(Fallback Format)"
+      }:**
+• ${createFileLink("test-service.js")} - Main service file
+• ${createFileLink("package.json")} - Dependencies configuration  
+• ${createFileLink(".env")} - Environment variables
+• ${createFileLink("README.md")} - Documentation
 
-📍 **Real File Links with Line Numbers:**
-• \`test-service.js:1\` - First line of this file
-• \`test-service.js:10\` - Around line 10 in this file
-• \`test-service.js:50\` - Around line 50 in this file
-• \`package.json:1\` - First line of package.json
-• \`package.json:5\` - Line 5 of package.json
+📍 **File Links with Line Numbers:**
+• ${createFileLink("test-service.js", 1)} - File header
+• ${createFileLink("test-service.js", 25)} - Middleware setup
+• ${createFileLink("test-service.js", 150)} - File links endpoint
+• ${createFileLink("package.json", 5)} - Dependencies section
+• ${createFileLink("package.json", 10)} - Scripts section
 
-🔍 **Code Review Example with Real Files:**
+📂 **Directory Structure Examples:**
+• ${createFileLink("src/components/Header.vue")} - Header component
+• ${createFileLink("src/utils/helpers.js", 45)} - Utility functions
+• ${createFileLink("src/styles/main.css", 12)} - Main stylesheet  
+• ${createFileLink("tests/unit/service.test.js", 67)} - Unit tests
+• ${createFileLink("config/webpack.config.js", 89)} - Build configuration
 
-**Issues Found:**
-- Missing error handling in \`test-service.js:95\` - Add try-catch blocks
-- Hardcoded secret in \`test-service.js:15\` - Move to environment variables
-- Missing dependency in \`package.json:10\` - Add required packages
+🔍 **Mock Code Review with Dynamic File Links:**
 
-📋 **Next Steps:**
-🚨 **BLOCKING**: Fix hardcoded secret in \`test-service.js:15\`
-⚠️ **HIGH PRIORITY**: Add error handling to \`test-service.js:95\`
-📋 **MEDIUM PRIORITY**: Update \`package.json:10\` dependencies
+**Security Issues:**
+- SQL injection vulnerability found in ${createFileLink(
+        "test-service.js",
+        95
+      )} - User input not sanitized
+- Missing authentication check in ${createFileLink(
+        "src/auth/middleware.js",
+        15
+      )} - Endpoint accessible without auth
+- Hardcoded credentials in ${createFileLink(
+        ".env.example",
+        5
+      )} - Move to secure storage
+
+**Performance Issues:**  
+- Database query in loop detected in ${createFileLink(
+        "src/data/repository.js",
+        23
+      )} - Consider batch operations
+- Large bundle size in ${createFileLink(
+        "src/components/Dashboard.vue",
+        150
+      )} - Implement code splitting
+- Memory leak in ${createFileLink(
+        "src/services/websocket.js",
+        78
+      )} - Fix event listener cleanup
+
+**Code Quality Issues:**
+- Missing error handling in ${createFileLink(
+        "test-service.js",
+        200
+      )} - Add try-catch block
+- Unused import in ${createFileLink(
+        "src/utils/formatters.js",
+        5
+      )} - Remove unused dependencies
+- Inconsistent naming in ${createFileLink(
+        "src/api/users.js",
+        34
+      )} - Use camelCase convention
+
+📋 **Next Steps with Dynamic Links:**
+🚨 **BLOCKING**: Fix SQL injection in ${createFileLink("test-service.js", 95)}
+⚠️ **HIGH PRIORITY**: Add authentication to ${createFileLink(
+        "src/auth/middleware.js",
+        15
+      )}
+📋 **MEDIUM PRIORITY**: Optimize queries in ${createFileLink(
+        "src/data/repository.js",
+        23
+      )}
+ℹ️ **LOW PRIORITY**: Clean up imports in ${createFileLink(
+        "src/utils/formatters.js",
+        5
+      )}
+
+💡 **Code Suggestion with Diff:**
+\`\`\`diff
+--- a/test-service.js
++++ b/test-service.js
+@@ -93,3 +93,3 @@
+- const query = "SELECT * FROM users WHERE id = " + userId;
++ const query = "SELECT * FROM users WHERE id = ?";
++ const result = await db.execute(query, [userId]);
+\`\`\`
+
+📁 **All Referenced Files:**
+• ${createFileLink("test-service.js")}
+• ${createFileLink("package.json")}
+• ${createFileLink(".env")} 
+• ${createFileLink("README.md")}
+• ${createFileLink("src/components/Header.vue")}
+• ${createFileLink("src/utils/helpers.js")}
+• ${createFileLink("src/styles/main.css")}
+• ${createFileLink("tests/unit/service.test.js")}
+• ${createFileLink("config/webpack.config.js")}
+• ${createFileLink("src/data/repository.js")}
+• ${createFileLink("src/components/Dashboard.vue")}
+• ${createFileLink("src/auth/middleware.js")}
+• ${createFileLink("src/services/websocket.js")}
+• ${createFileLink("src/api/users.js")}
+• ${createFileLink("src/utils/formatters.js")}
+
+🧪 **Debug Information:**
+- **Detected Workspace**: ${detectedWorkspace || "None"}
+- **Link Format**: ${
+        detectedWorkspace
+          ? "VS Code URI (vscode://file/)"
+          : "Backticks fallback"
+      }
+- **Request Parameters**: ${Object.keys(req.body).join(", ")}
+- **Editor Context Available**: ${editor_context ? "Yes" : "No"}
+- **Copilot Context Available**: ${copilot_context ? "Yes" : "No"}
 
 🧪 **Testing Instructions:**
-1. Make sure you're in VS Code (or your IDE) with this project open
-2. Click on the file references above
-3. They should navigate to the actual files in your project
-4. Line numbers should jump to specific lines
+1. ${
+        detectedWorkspace
+          ? "Click on any file reference above - they should be clickable in VS Code!"
+          : "Provide workspace_path parameter to enable VS Code clickable links"
+      }
+2. File links should navigate to the actual files in your IDE
+3. Line number links should jump to specific lines
+4. ${
+        detectedWorkspace
+          ? "VS Code URI links are active - test the navigation!"
+          : "Try again with workspace_path parameter for full functionality"
+      }
 
-**Important Notes:**
-- File links only work when the files actually exist in your workspace
-- Your IDE must be open in the project directory
-- Links work best when you're in a Git repository context`,
+**How to Provide Workspace Path:**
+Include one of these parameters in your request:
+- \`workspace_path\`: "/Users/username/myproject"
+- \`workspace_root\`: "/Users/username/myproject"  
+- \`project_path\`: "/Users/username/myproject"
+- \`editor_context\`: {"workspace_path": "/Users/username/myproject"}`,
 
       timestamp: new Date().toISOString(),
       status: "success",
+      debug_info: {
+        detected_workspace: detectedWorkspace,
+        link_format: detectedWorkspace ? "vscode_uri" : "backticks",
+        request_parameters: Object.keys(req.body),
+        workspace_sources_checked: [
+          "workspace_path",
+          "workspace_root",
+          "project_path",
+          "repository_path",
+          "editor_context.workspace_path",
+          "copilot_context.workspace.rootPath",
+        ],
+      },
     };
 
-    console.log("📤 Sending file links response with real files");
+    console.log(
+      "📤 Sending file links response with workspace:",
+      detectedWorkspace
+    );
     res.json(response);
   } catch (error) {
     console.error("❌ Error in file links endpoint:", error);
