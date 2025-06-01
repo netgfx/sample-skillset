@@ -152,7 +152,7 @@ app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
   });
 });
 
-// NEW: File links testing endpoint
+// NEW: File links testing endpoint - using real files
 app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
   try {
     console.log("🔗 File links endpoint called with:", req.body);
@@ -160,93 +160,53 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
     // Simulate some processing time
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Return a flat response structure that Copilot can display properly
+    // Return a response with REAL files that exist in your project
     const response = {
       message: `🔗 **File Link Testing Results**
 
-Testing GitHub Copilot file linking functionality with various file reference formats.
+Testing GitHub Copilot file linking functionality with files that actually exist in your project.
 
-📁 **Basic File Links:**
-• \`test-service.js\` - Main service file
-• \`test-file.js\` - Test utility file
-• \`package.json\` - Dependencies configuration
-• \`README.md\` - Documentation file
+📁 **Real Files in Your Project:**
+• \`test-service.js\` - This current service file
+• \`package.json\` - Your project dependencies
+• \`.env\` - Environment configuration (if it exists)
+• \`.gitignore\` - Git ignore file (if it exists)
 
-📍 **File Links with Line Numbers:**
-• \`test-service.js:1\` - File header
-• \`test-service.js:25\` - Middleware setup
-• \`test-service.js:150\` - File links endpoint  
-• \`test-file.js:10\` - Helper function
-• \`test-file.js:25-30\` - Error handling block
+📍 **Real File Links with Line Numbers:**
+• \`test-service.js:1\` - First line of this file
+• \`test-service.js:10\` - Around line 10 in this file
+• \`test-service.js:50\` - Around line 50 in this file
+• \`package.json:1\` - First line of package.json
+• \`package.json:5\` - Line 5 of package.json
 
-📂 **Directory Structure:**
-• \`src/components/Header.vue\` - Header component
-• \`src/utils/helpers.js:45\` - Utility functions
-• \`src/styles/main.css:12-20\` - Main stylesheet
-• \`tests/unit/service.test.js:67\` - Unit tests
-• \`config/webpack.config.js:89\` - Build configuration
+🔍 **Code Review Example with Real Files:**
 
-🔍 **Mock Code Review with File Links:**
+**Issues Found:**
+- Missing error handling in \`test-service.js:95\` - Add try-catch blocks
+- Hardcoded secret in \`test-service.js:15\` - Move to environment variables
+- Missing dependency in \`package.json:10\` - Add required packages
 
-**Security Issues:**
-- SQL injection vulnerability found in \`test-service.js:95\` - User input not sanitized
-- Missing authentication check in \`test-file.js:15\` - Endpoint accessible without auth
-
-**Performance Issues:**  
-- Database query in loop detected in \`src/data/repository.js:23-35\` - Consider batch operations
-- Large bundle size in \`src/components/Dashboard.vue:150\` - Implement code splitting
-
-**Code Quality Issues:**
-- Missing error handling in \`test-service.js:200\` - Add try-catch block
-- Unused import in \`test-file.js:5\` - Remove unused dependencies
-- Inconsistent naming in \`src/utils/formatters.js:12\` - Use camelCase convention
-
-📋 **Next Steps with File References:**
-🚨 **BLOCKING**: Fix SQL injection in \`test-service.js:95\`
-⚠️ **HIGH PRIORITY**: Add authentication to \`test-file.js:15\`  
-📋 **MEDIUM PRIORITY**: Optimize queries in \`src/data/repository.js:23-35\`
-ℹ️ **LOW PRIORITY**: Clean up imports in \`test-file.js:5\`
-
-💡 **Code Suggestion with Diff:**
-\`\`\`diff
---- a/test-service.js
-+++ b/test-service.js
-@@ -93,3 +93,3 @@
-- const query = "SELECT * FROM users WHERE id = " + userId;
-+ const query = "SELECT * FROM users WHERE id = ?";
-+ const result = await db.execute(query, [userId]);
-\`\`\`
-
-📁 **All Referenced Files:**
-• \`test-service.js\`
-• \`test-file.js\`  
-• \`package.json\`
-• \`README.md\`
-• \`src/components/Header.vue\`
-• \`src/utils/helpers.js\`
-• \`src/styles/main.css\`
-• \`tests/unit/service.test.js\`
-• \`config/webpack.config.js\`
-• \`src/data/repository.js\`
-• \`src/components/Dashboard.vue\`
-• \`src/utils/formatters.js\`
+📋 **Next Steps:**
+🚨 **BLOCKING**: Fix hardcoded secret in \`test-service.js:15\`
+⚠️ **HIGH PRIORITY**: Add error handling to \`test-service.js:95\`
+📋 **MEDIUM PRIORITY**: Update \`package.json:10\` dependencies
 
 🧪 **Testing Instructions:**
-1. Click on any file reference above (they should be clickable in Copilot Chat)
-2. File links should navigate to the actual files in your IDE
-3. Line number links should jump to specific lines
-4. Line range links should highlight the specified range
+1. Make sure you're in VS Code (or your IDE) with this project open
+2. Click on the file references above
+3. They should navigate to the actual files in your project
+4. Line numbers should jump to specific lines
 
-**Expected Behavior:**
-- \`test-service.js:150\` should open this file and jump to line 150
-- \`test-file.js:25-30\` should open the file and highlight lines 25-30
-- Files without line numbers should just open the file`,
+**Important Notes:**
+- File links only work when the files actually exist in your workspace
+- Your IDE must be open in the project directory
+- Links work best when you're in a Git repository context`,
 
       timestamp: new Date().toISOString(),
       status: "success",
     };
 
-    console.log("📤 Sending file links response");
+    console.log("📤 Sending file links response with real files");
     res.json(response);
   } catch (error) {
     console.error("❌ Error in file links endpoint:", error);
