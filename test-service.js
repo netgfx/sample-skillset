@@ -178,7 +178,7 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
         linkTarget = `${normalizedWorkspace}/${normalizedFilePath}`;
         linkTarget = linkTarget.replace(/\/\//g, "/"); // Ensure no double slashes
         // Optionally, prefix with file:/// if plain absolute path doesn't work
-        linkTarget = `file://${linkTarget}`; // Note: file:// (two slashes for local) or file:/// (three for UNC/empty authority)
+        //linkTarget = `file://${linkTarget}`; // Note: file:// (two slashes for local) or file:/// (three for UNC/empty authority)
         // For local files, file:///path is common.
       } else {
         linkTarget = `./${normalizedFilePath}`; // Fallback
