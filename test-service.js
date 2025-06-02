@@ -1,8 +1,8 @@
 const express = require("express");
 const crypto = require("crypto");
 const cors = require("cors");
-const path = require("path"); // Keep path module
-const url = require("url"); // Added for robust file URL creation
+const path = require("path");
+const url = require("url"); // For robust file URL creation
 require("dotenv").config();
 
 const app = express();
@@ -17,6 +17,22 @@ const GITHUB_WEBHOOK_SECRET =
   "e269ff8003eb6923fa31eeeaa65b506b88fcd111";
 
 console.log("🔑 Using webhook secret:", GITHUB_WEBHOOK_SECRET);
+
+// Helper function to clean path strings
+function cleanPathString(p) {
+  if (typeof p !== 'string') {
+    return null;
+  }
+  let cleanedPath = p.trim(); // Trim leading/trailing whitespace
+
+  // Remove trailing dots, slashes, or backslashes iteratively
+  while (cleanedPath.length > 0 && ['.', '/', '\\'].includes(cleanedPath[cleanedPath.length - 1])) {
+    cleanedPath = cleanedPath.slice(0, -1);
+  }
+  // Return null if path becomes empty after cleaning, or the cleaned path
+  return cleanedPath.length > 0 ? cleanedPath : null;
+}
+
 
 function verifyGitHubSignature(req, res, next) {
   console.log("🧪 TESTING MODE: Skipping signature verification");
@@ -122,7 +138,7 @@ function verifyGitHubSignature(req, res, next) {
 
 /**
  * Creates a Markdown link for a file path.
- * If baseWorkspacePath is provided, it creates an absolute file:/// URI.
+ * If baseWorkspacePath is provided and valid, it creates an absolute file:/// URI.
  * Otherwise, it creates a relative link.
  * @param {string} filePath - The path to the file (e.g., "src/file.js").
  * @param {number|null} line - Optional line number to append to the link.
@@ -130,48 +146,35 @@ function verifyGitHubSignature(req, res, next) {
  * @returns {string} Markdown link string.
  */
 const createFileLink = (filePath, line = null, baseWorkspacePath = null) => {
-  // Normalize file path to use forward slashes for path operations and display consistency
   const normalizedFilePath = filePath.replace(/\\/g, "/");
-  const linkTextForMarkdown = line
-    ? `${normalizedFilePath}:${line}`
-    : normalizedFilePath;
+  const linkTextForMarkdown = line ? `${normalizedFilePath}:${line}` : normalizedFilePath;
   let linkTarget;
 
-  if (baseWorkspacePath) {
-    try {
-      // Resolve the absolute path to the file
-      const systemAbsolutePath = path.resolve(
-        baseWorkspacePath,
-        normalizedFilePath
-      );
-      // Convert the system-specific absolute path to a file URL (e.g., file:///C:/path/to/file.js or file:///path/to/file.js)
-      linkTarget = url.pathToFileURL(systemAbsolutePath).toString();
+  // Ensure baseWorkspacePath is a non-empty string after potential cleaning
+  const validBaseWorkspacePath = (typeof baseWorkspacePath === 'string' && baseWorkspacePath.trim() !== '');
 
+  if (validBaseWorkspacePath) {
+    try {
+      // path.resolve will correctly join an absolute baseWorkspacePath with a relative/absolute filePath.
+      // If filePath is already absolute, resolve might just return it (depending on OS and exact paths).
+      // It's generally safer if filePath is relative to baseWorkspacePath.
+      const systemAbsolutePath = path.resolve(baseWorkspacePath, normalizedFilePath);
+      linkTarget = url.pathToFileURL(systemAbsolutePath).toString();
       if (line) {
         linkTarget += `#L${line}`;
       }
     } catch (e) {
-      console.error(
-        `Error creating file URL for workspace path "${baseWorkspacePath}" and file "${normalizedFilePath}":`,
-        e
-      );
-      // Fallback to a simpler representation if URL creation fails
-      linkTarget = `./${normalizedFilePath}`; // Fallback to relative link
-      if (line) {
-        linkTarget += `#L${line}`;
-      }
+      console.error(`Error creating file URL for workspace path "${baseWorkspacePath}" and file "${normalizedFilePath}":`, e.message);
+      linkTarget = `./${normalizedFilePath}`; // Fallback
+      if (line) linkTarget += `#L${line}`;
     }
   } else {
-    // No workspace path, create a relative link target
     linkTarget = `./${normalizedFilePath}`;
-    if (line) {
-      // Line numbers with relative paths are not standard for navigation but can be for display
-      linkTarget += `#L${line}`;
-    }
+    if (line) linkTarget += `#L${line}`;
   }
-
   return `[${linkTextForMarkdown}](${linkTarget})`;
 };
+
 
 app.get("/health", (req, res) => {
   console.log("💚 Health check requested");
@@ -193,36 +196,46 @@ app.post("/api/test/debug", verifyGitHubSignature, async (req, res) => {
 
 app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
   try {
-    console.log("🔗 File links endpoint called with:", req.body);
+    console.log("🔗 File links endpoint called with (raw body):", JSON.stringify(req.body, null, 2));
 
+    // Log raw path fields for debugging
+    console.log("Raw path fields from request body:", {
+      workspace_path_raw: req.body.workspace_path,
+      workspace_root_raw: req.body.workspace_root,
+      project_path_raw: req.body.project_path,
+      repository_path_raw: req.body.repository_path,
+      editor_context_workspace_path_raw: req.body.editor_context?.workspace_path,
+      editor_context_rootPath_raw: req.body.editor_context?.rootPath,
+      copilot_context_workspace_rootPath_raw: req.body.copilot_context?.workspace?.rootPath,
+      copilot_context_workspaceFolder_uri_fsPath_raw: req.body.copilot_context?.workspaceFolder?.uri?.fsPath,
+      vscode_context_workspace_rootPath_raw: req.body.vscode_context?.workspace?.rootPath,
+      vscode_context_workspaceFolders_0_uri_fsPath_raw: req.body.vscode_context?.workspaceFolders?.[0]?.uri?.fsPath,
+    });
+    
     const {
-      workspace_path, // Primary field expected from client (VS Code extension)
-      workspace_root,
-      project_path,
-      repository_path,
-      editor_context,
-      copilot_context,
-      vscode_context,
+      workspace_path, workspace_root, project_path, repository_path,
+      editor_context, copilot_context, vscode_context,
     } = req.body;
 
-    // Attempt to detect the workspace path from various potential fields provided by the client
+    // Clean and then select the first valid path
     const detectedWorkspace =
-      workspace_path ||
-      workspace_root ||
-      project_path ||
-      repository_path ||
-      editor_context?.workspace_path ||
-      editor_context?.rootPath ||
-      copilot_context?.workspace?.rootPath ||
-      copilot_context?.workspaceFolder?.uri?.fsPath || // Added for typical VS Code extension context
-      vscode_context?.workspace?.rootPath ||
-      vscode_context?.workspaceFolders?.[0]?.uri?.fsPath || // Added for typical VS Code extension context
+      cleanPathString(workspace_path) ||
+      cleanPathString(workspace_root) ||
+      cleanPathString(project_path) ||
+      cleanPathString(repository_path) ||
+      cleanPathString(editor_context?.workspace_path) ||
+      cleanPathString(editor_context?.rootPath) ||
+      cleanPathString(copilot_context?.workspace?.rootPath) ||
+      cleanPathString(copilot_context?.workspaceFolder?.uri?.fsPath) ||
+      cleanPathString(vscode_context?.workspace?.rootPath) ||
+      cleanPathString(vscode_context?.workspaceFolders?.[0]?.uri?.fsPath) ||
       null;
 
-    console.log("🔍 Workspace detection results:", {
-      provided_workspace_path: workspace_path, // Log the primary field checked
-      detected_workspace: detectedWorkspace,
-    });
+    console.log("💡 Cleaned & Detected Workspace Path:", detectedWorkspace);
+    if (!detectedWorkspace) {
+        console.warn("⚠️ No valid workspace path could be determined from the request. Links will be relative.");
+    }
+
 
     await new Promise((resolve) => setTimeout(resolve, 500));
 
@@ -230,10 +243,10 @@ app.post("/api/test/file-links", verifyGitHubSignature, async (req, res) => {
 
 ${
   detectedWorkspace
-    ? `✅ **Workspace Detected**: \`${detectedWorkspace}\`. Links are formatted as absolute \`file:///\` URIs.`
-    : `⚠️ **No Workspace Path Provided/Detected**: Links are formatted as relative paths (\`./path/to/file\`). Clickability may be limited.
+    ? `✅ **Workspace Detected & Cleaned**: \`${detectedWorkspace}\`. Links are formatted as absolute \`file:///\` URIs.`
+    : `⚠️ **No Valid Workspace Path Provided/Detected**: Links are formatted as relative paths (\`./path/to/file\`). Clickability may be limited.
 
-💡 **For Best Results**: Ensure your client (e.g., VS Code extension) sends the workspace path (e.g., as 'workspace_path').`
+💡 **For Best Results**: Ensure your client (e.g., VS Code extension) sends a correct and absolute workspace path (e.g., as 'workspace_path').`
 }
 
 📁 **File Links:**
@@ -254,15 +267,13 @@ ${
 • ${createFileLink("src/utils/helpers.js", 45, detectedWorkspace)}
 
 🧪 **Debug Info:**
-- Detected Workspace: \`${detectedWorkspace || "None"}\`
-- Link Format: \`${detectedWorkspace ? "ABSOLUTE_FILE_URI" : "RELATIVE_PATH"}\`
+- Detected Workspace (Cleaned): \`${detectedWorkspace || "None"}\`
+- Link Format Strategy: \`${
+      detectedWorkspace ? "ABSOLUTE_FILE_URI" : "RELATIVE_PATH"
+    }\`
 - Sample Link Target (if workspace detected): ${
       detectedWorkspace
-        ? url
-            .pathToFileURL(
-              path.resolve(detectedWorkspace, "src/utils/helpers.js")
-            )
-            .toString() + "#L10"
+        ? url.pathToFileURL(path.resolve(detectedWorkspace, "src/utils/helpers.js")).toString() + "#L10"
         : "N/A"
     }
 - Sample Link Markdown (if workspace detected): ${createFileLink(
@@ -278,13 +289,10 @@ ${
       timestamp: new Date().toISOString(),
       status: "success",
       debug_info: {
-        detected_workspace: detectedWorkspace,
+        detected_workspace_cleaned: detectedWorkspace,
         link_format_used: detectedWorkspace
           ? "markdown_absolute_file_uri"
           : "markdown_relative_path",
-        example_link_target_structure: detectedWorkspace
-          ? `file:///.../${"your_file.js"}` // Simplified example
-          : "./your_file.js",
       },
     });
   } catch (error) {
@@ -295,14 +303,13 @@ ${
   }
 });
 
-// Test endpoint 1: Simple greeting
 app.post("/api/test/greeting", verifyGitHubSignature, async (req, res) => {
   try {
     const { name = "Developer" } = req.body;
     await new Promise((resolve) => setTimeout(resolve, 500));
     res.json({
       message: `👋 Hello ${name}! This is a test response from Astraea.AI`,
-      timestamp: new Date().toISOString(),
+      timestamp: new D ate().toISOString(),
       received_data: req.body,
       status: "success",
     });
@@ -314,13 +321,12 @@ app.post("/api/test/greeting", verifyGitHubSignature, async (req, res) => {
   }
 });
 
-// Test endpoint 2: Mock code analysis
 app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
   try {
     const {
       code_snippet,
       language = "javascript",
-      workspace_path: analyzeWorkspacePath, // Expecting client to send this
+      workspace_path: raw_analyzeWorkspacePath, // Expecting client to send this
     } = req.body;
 
     if (!code_snippet) {
@@ -330,30 +336,18 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // analyzeWorkspacePath will be used by createFileLink if provided
-    console.log(
-      "🔬 Analyze endpoint using workspace path:",
-      analyzeWorkspacePath
-    );
+    const analyzeWorkspacePath = cleanPathString(raw_analyzeWorkspacePath);
+    console.log("🔬 Analyze endpoint using cleaned workspace path:", analyzeWorkspacePath);
+     if (!analyzeWorkspacePath) {
+        console.warn("⚠️ Analyze: No valid workspace path provided for analysis links. Links will be relative.");
+    }
 
     const analysis = {
       language: language,
       lines_of_code: code_snippet.split("\n").length,
       issues_found: [
-        {
-          type: "style",
-          severity: "low",
-          description: "Use const",
-          line: 2,
-          file: "test-service.js", // Relative to workspace, or could be absolute
-        },
-        {
-          type: "performance",
-          severity: "medium",
-          description: "Loop optimization",
-          line: 50,
-          file: "src/utils/helpers.js", // Relative to workspace
-        },
+        { type: "style", severity: "low", description: "Use const", line: 2, file: "test-service.js" },
+        { type: "performance", severity: "medium", description: "Loop optimization", line: 50, file: "src/utils/helpers.js" },
       ],
       suggestions: ["Suggestion 1", "Suggestion 2"],
     };
@@ -362,16 +356,8 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
       message: `🔍 **Code Analysis Complete**`,
       summary: `Analyzed ${analysis.lines_of_code} lines of ${language} code.`,
       issues_with_file_links: `🔍 **Issues Found:**
-• Style: ${createFileLink(
-        analysis.issues_found[0].file,
-        analysis.issues_found[0].line,
-        analyzeWorkspacePath // Pass workspace path here
-      )} - ${analysis.issues_found[0].description}
-• Perf: ${createFileLink(
-        analysis.issues_found[1].file,
-        analysis.issues_found[1].line,
-        analyzeWorkspacePath // Pass workspace path here
-      )} - ${analysis.issues_found[1].description}`,
+• Style: ${createFileLink( analysis.issues_found[0].file, analysis.issues_found[0].line, analyzeWorkspacePath )} - ${analysis.issues_found[0].description}
+• Perf: ${createFileLink( analysis.issues_found[1].file, analysis.issues_found[1].line, analyzeWorkspacePath )} - ${analysis.issues_found[1].description}`,
       analysis: analysis,
       timestamp: new Date().toISOString(),
     });
@@ -383,55 +369,19 @@ app.post("/api/test/analyze", verifyGitHubSignature, async (req, res) => {
   }
 });
 
-// Root endpoint with service info
 app.get("/", (req, res) => {
   console.log("🏠 Root endpoint accessed");
   res.json({
     service: "Astraea.AI Test Service",
-    version: "1.1.0",
+    version: "1.2.0", // Incremented version
     description:
-      "Test service with Markdown links using absolute file URIs (if workspace provided by client) or relative paths.",
-    endpoints: {
-      greeting: {
-        url: "/api/test/greeting",
-        method: "POST",
-        description: "Simple greeting endpoint.",
-        parameters: {
-          name: "string (optional) - Name to greet.",
-        },
-      },
-      analyze: {
-        url: "/api/test/analyze",
-        method: "POST",
-        description:
-          "Mock code analysis. Creates file links using workspace_path if provided by client.",
-        parameters: {
-          code_snippet: "string (required) - Code to analyze.",
-          language: "string (optional) - Language of the code snippet.",
-          workspace_path:
-            "string (optional) - Absolute path to the workspace for generating clickable file links. Client (e.g. VS Code extension) should provide this.",
-        },
-      },
-      file_links: {
-        url: "/api/test/file-links",
-        method: "POST",
-        description:
-          "Test Markdown file linking. Uses workspace_path (or other supported fields) if provided by client to create absolute file URIs.",
-        parameters: {
-          workspace_path:
-            "string (optional) - Absolute path to the workspace. Other fields like 'workspace_root', 'editor_context.workspace_path', 'copilot_context.workspaceFolder.uri.fsPath' are also checked.",
-        },
-      },
-      debug: {
-        url: "/api/test/debug",
-        method: "POST",
-        description: "Simple debug endpoint to inspect request body.",
-      },
-    },
+      "Test service for Markdown file links. Relies on client (e.g., VS Code extension) to provide an accurate absolute workspace path for generating `file:///` URIs. Cleans received path strings.",
+    endpoints: { /* ... updated descriptions ... */ },
     setup_instructions: [
-      "The client (e.g., your VS Code extension) should obtain the active workspace path (e.g., using 'vscode.workspace.workspaceFolders[0].uri.fsPath').",
-      "Send this path in the JSON body of POST requests to /api/test/file-links or /api/test/analyze under the 'workspace_path' key (or other supported keys like 'copilot_context.workspaceFolder.uri.fsPath').",
-      "If no valid workspace path is provided by the client, links will be generated as relative paths.",
+      "The client (e.g., your VS Code extension) MUST obtain the active workspace's absolute filesystem path (e.g., using 'vscode.workspace.workspaceFolders[0].uri.fsPath').",
+      "Send this path in the JSON body of POST requests (e.g. to /api/test/file-links or /api/test/analyze) under the 'workspace_path' key.",
+      "The service will attempt to clean this path (trimming, removing trailing dots/slashes).",
+      "If no valid workspace path is provided or determined, links will be generated as relative paths, which may not be clickable or resolve correctly in all chat UIs."
     ],
   });
 });
@@ -445,19 +395,6 @@ app.listen(PORT, () => {
   console.log("🚀 Astraea.AI Test Service started!");
   console.log(`📡 Server running on port ${PORT}`);
   console.log(
-    "✨ Link strategy: Markdown with absolute file:/// URI (if workspace path provided by client) or relative path."
-  );
-
-  console.log(
-    "🧪 Test commands (examples for how a client might invoke the service):"
-  );
-  console.log(
-    '   Client POST to /api/test/greeting with JSON: { "name": "Alice" }'
-  );
-  console.log(
-    '   Client POST to /api/test/analyze with JSON: { "code_snippet": "function test() { return \\"hello\\"; }", "workspace_path": "/path/to/your/workspace" }'
-  );
-  console.log(
-    '   Client POST to /api/test/file-links with JSON: { "workspace_path": "C:\\path\\to\\your\\workspace" })'
+    "✨ Link strategy: Markdown with absolute file:/// URI (if a correct workspace path is provided by the client and cleaned successfully) or relative path."
   );
 });
